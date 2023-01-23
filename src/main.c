@@ -1,30 +1,37 @@
 /*
- * Copyright (c) 2019 Nordic Semiconductor
+ * Copyright (c) 2017, NXP
  *
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include "hello_world_driver.h"
-#include <stdio.h>
 #include <zephyr/kernel.h>
-
-const struct device *dev;
-
-static void user_entry(void *p1, void *p2, void *p3)
-{
-	hello_world_print(dev);
-}
+#include <zephyr/drivers/sensor.h>
+#include <stdio.h>
 
 void main(void)
 {
-	printk("Hello World from the app!\n");
+   struct sensor_value green;
+   const struct device *const dev = device_get_binding("MAX30102");
 
-	dev = device_get_binding("CUSTOM_DRIVER");
+   if (dev == NULL)
+   {
+      printf("Could not get max30102 device\n");
+      return;
+   }
+   if (!device_is_ready(dev))
+   {
+      printf("max30102 device %s is not ready\n", dev->name);
+      return;
+   }
 
-	__ASSERT(dev, "Failed to get device binding");
+   while (1)
+   {
+      sensor_sample_fetch(dev);
+      sensor_channel_get(dev, SENSOR_CHAN_GREEN, &green);
 
-	printk("device is %p, name is %s\n", dev, dev->name);
+      /* Print green LED data*/
+      printf("GREEN=%d\n", green.val1);
 
-	k_object_access_grant(dev, k_current_get());
-	k_thread_user_mode_enter(user_entry, NULL, NULL, NULL);
+      k_sleep(K_MSEC(20));
+   }
 }
