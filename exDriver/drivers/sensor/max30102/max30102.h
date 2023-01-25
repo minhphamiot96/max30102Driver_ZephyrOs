@@ -83,6 +83,17 @@ typedef enum
    MAX30102_SPO2_SAMPLE_RATE_3200_HZ = 7,             /**< 3200Hz */
 } max30102_spo2_sample_rate_t;
 
+/** 
+ * @brief max30102 LED pulse width control.
+ */
+typedef enum
+{
+   MAX30102_PW_15BITS = 0,
+   MAX30102_PW_16BITS,
+   MAX30102_PW_17BITS,
+   MAX30102_PW_18BITS,
+} max30102_pw_control_t;
+
 /**
  * @brief max30102 adc resolution enumeration definition
  */
@@ -104,7 +115,7 @@ typedef union
       uint8_t reverse : 1;                            /**< Bit reverse.                                  */
       max30102_spo2_adc_range_t adcRange : 2;         /**< SpO2 ADC Range Control. (18 bit resolution)   */
       max30102_spo2_sample_rate_t sampleRate : 3;     /**< SpO2 Sample Rate Control.                     */
-      max30102_adc_resolution_t  ledPw : 2;           /**< LED Pulse Width Control.                      */
+      max30102_pw_control_t  ledPw : 2;               /**< LED Pulse Width Control.                      */
    } B;
 } max30102_spo2_config_t;
 /**
