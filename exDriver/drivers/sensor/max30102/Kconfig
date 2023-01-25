@@ -41,6 +41,7 @@ config MAX30102_TEMPERATURE_EN
 
 config MAX30102_FIFO_ROLLOVER_EN
 	bool "FIFO rolls on full"
+	default 0
 	help
 	  Controls the behavior of the FIFO when the FIFO becomes completely
 	  filled with data. If set, the FIFO address rolls over to zero and the

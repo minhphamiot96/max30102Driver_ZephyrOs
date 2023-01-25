@@ -74,22 +74,152 @@ static const struct sensor_driver_api max30102_driver_api = {
     .channel_get = max30102_channel_get,
 };
 
-static struct max30102_config max30102_config = {
-    // .i2c = I2C_DT_SPEC_INST_GET(0),
-};
+// static struct max30102_config max30102_config = {
+//     .i2c = I2C_DT_SPEC_INST_GET(0),
+// };
 
-static struct max30102_data max30102_data;
+// static struct max30102_data max30102_data;
 
 static int max30102_int(const struct device *dev)
 {
+   const struct max30102_config *config = dev->config;
+   struct max30102_data *data = dev->data;
+   uint8_t part_id = 0U;
+   max30102_mode_t modeCfg = 0U;
+   uint32_t ledChnl;
+   int fifoChnl;
 
+   /** Determine whether i2c bus ready. */
+   if (!device_is_ready (config->i2c.bus)) 
+   {
+      LOG_ERR ("Bus device is not ready!");
+      return -ENODEV;
+   }
+
+   /* Check the part id to make sure this is MAX30102 */
+   if (i2c_reg_read_byte_dt (&config->i2c, MAX30102_REG_PART_ID,
+                             &part_id))
+   {
+      LOG_ERR("Could not get Part ID");
+      return -EIO;
+   }
+
+   if (part_id != MAX30102_PART_ID)
+   {
+      LOG_ERR("Got Part ID 0x%02x, expected 0x%02x",
+              part_id, MAX30102_PART_ID);
+      return -EIO;
+   }
+
+   /** Reset the sensor. */
+   if (i2c_reg_write_byte_dt (&config->i2c, MAX30102_REG_MODE_CFG, MAX30102_MODE_CFG_RESET_MASK))
+   {
+      return -EIO;
+   }
+
+   /** Wait for reset to be cleared. */
+   do
+   {
+      if (i2c_reg_read_byte_dt (&config->i2c, MAX30102_REG_MODE_CFG,
+                                &modeCfg))
+      {
+         LOG_ERR("Could read mode cfg after reset");
+         return -EIO;
+      }
+   } while (modeCfg & MAX30102_MODE_CFG_RESET_MASK);
+
+   /** Write the FIFO configuration register */
+   if (i2c_reg_write_byte_dt  (&config->i2c, MAX30102_REG_FIFO_CFG,
+                               config->fifo.R))
+   {
+      return -EIO;
+   }
+
+   /** Write the mode configuration register */
+   if (i2c_reg_write_byte_dt (&config->i2c, MAX30102_REG_MODE_CFG,
+                              config->mode.R))
+   {
+      return -EIO;
+   }
+
+   /* Write the SpO2 configuration register */
+   if (i2c_reg_write_byte_dt (&config->i2c, MAX30102_REG_SPO2_CFG,
+                              config->spo2.R))
+   {
+      return -EIO;
+   }
+
+   /* Write the LED pulse amplitude registers */
+   if (i2c_reg_write_byte_dt (&config->i2c, MAX30102_REG_LED1_PA,
+                              config->ledPa[0]))
+   {
+      return -EIO;
+   }
+   if (i2c_reg_write_byte_dt (&config->i2c, MAX30102_REG_LED2_PA,
+                              config->ledPa[1]))
+   {
+      return -EIO;
+   }
+
+#ifdef CONFIG_MAX30102_MULTI_LED_MODE
+   uint8_t multiLed[2] = {0U};
+
+   /* Write the multi-LED mode control registers */
+   multiLed[0] = (config->slot[1] << 4) | (config->slot[0]);
+   multiLed[1] = (config->slot[3] << 4) | (config->slot[2]);
+
+   if (i2c_reg_write_byte_dt (&config->i2c, MAX30102_REG_MULTI_LED,
+                              multiLed[0]))
+   {
+      return -EIO;
+   }
+   if (i2c_reg_write_byte_dt (&config->i2c, MAX30102_REG_MULTI_LED + 1,
+                              multiLed[1]))
+   {
+      return -EIO;
+   }
+#endif
+
+   /* Initialize the channel map and active channel count */
+   data->numChannel = 0U;
+   for (ledChnl = 0U; ledChnl < MAX30102_MAX_NUM_CHANNELS; ledChnl ++)
+   {
+      data->map[ledChnl] = MAX30102_MAX_NUM_CHANNELS;
+   }
 }
 
-#define MAX30102_INIT(inst)                                                            \
-   static struct max30102_data max30102_data_##inst;                                   \
-                                                                                       \
-   static const struct max30102_config max30102_config_##inst;                         \
-                                                                                       \
+#define MAX30102_INIT(inst) \
+   static struct max30102_data max30102_data_##inst;              \
+   static const struct max30102_config max30102_config_##inst = { \
+      .i2c = I2C_DT_SPEC_INST_GET(inst),                          \
+      .fifo.B.smpAve = CONFIG_MAX30102_SMP_AVE,                   \
+      .fifo.B.enRollOver = CONFIG_MAX30102_FIFO_ROLLOVER_EN,      \
+      .fifo.B.fifoAlmostFull = CONFIG_MAX30102_FIFO_A_FULL,       \
+   #if defined (CONFIG_MAX30102_HEART_RATE_MODE)                  \
+      .mode.B.mode = MAX30102_MODE_HEART_RATE,                    \
+      .slot[0] = MAX30102_SLOT_RED_LED1_PA,                       \
+      .slot[1] = MAX30102_SLOT_DISABLED,                          \
+      .slot[2] = MAX30102_SLOT_DISABLED,                          \
+      .slot[3] = MAX30102_SLOT_DISABLED,                          \
+   #elif defined(CONFIG_MAX30102_SPO2_MODE)                       \
+      .mode = MAX30102_MODE_SPO2,                                 \
+      .slot[0] = MAX30102_SLOT_RED_LED1_PA,                       \
+      .slot[1] = MAX30102_SLOT_IR_LED2_PA,                        \
+      .slot[2] = MAX30102_SLOT_DISABLED,                          \
+      .slot[3] = MAX30102_SLOT_DISABLED,                          \
+   #else                                                          \
+      .mode = MAX30102_MODE_MULTI_LED,                            \
+      .slot[0] = CONFIG_MAX30102_SLOT1,                           \
+      .slot[1] = CONFIG_MAX30102_SLOT2,                           \
+      .slot[2] = CONFIG_MAX30102_SLOT3,                           \
+      .slot[3] = CONFIG_MAX30102_SLOT4,                           \
+   #endif                                                         \
+      .spo2.B.adcRange = CONFIG_MAX30102_ADC_RGE,                 \
+      .spo2.B.sampleRate = CONFIG_MAX30102_SR,                    \
+      .spo2.B.ledPw = MAX30102_PW_18BITS,                         \
+      .led_pa[0] = CONFIG_MAX30102_LED1_PA,                       \
+      .led_pa[1] = CONFIG_MAX30102_LED2_PA,                       \
+   };                                                             \
    SENSOR_DEVICE_DT_INST_DEFINE(inst, max30102_int, NULL,                              \
                                 &max30102_data_##inst,                                 \
                                 &max30102_config_##inst, POST_KERNEL,                  \

@@ -97,11 +97,15 @@ typedef enum
 /** 
  * @brief max30102 spo2 configuration
  */
-typedef struct 
+typedef union 
 {
-   max30102_adc_resolution_t adcRange;                /**< SpO2 ADC Range Control. (18 bit resolution)   */
-   max30102_spo2_sample_rate_t sampleRate;            /**< SpO2 Sample Rate Control.                     */
-   max30102_adc_resolution_t  ledPw;                  /**< LED Pulse Width Control.                      */
+   uint8_t R; 
+   struct {
+      uint8_t reverse : 1;                            /**< Bit reverse.                                  */
+      max30102_spo2_adc_range_t adcRange : 2;         /**< SpO2 ADC Range Control. (18 bit resolution)   */
+      max30102_spo2_sample_rate_t sampleRate : 3;     /**< SpO2 Sample Rate Control.                     */
+      max30102_adc_resolution_t  ledPw : 2;           /**< LED Pulse Width Control.                      */
+   } B;
 } max30102_spo2_config_t;
 /**
  * @brief max30102 led enumeration definition
@@ -134,20 +138,37 @@ typedef enum
    MAX30102_MODE_MULTI_LED  = 0x07, /**< multi-led mode */
 } max30102_mode_t;
 
+/** 
+ * @brief max30102 mode configuration
+ */
+typedef union
+{
+   uint8_t R;
+   struct {
+      bool SHDN : 1;                /**< Shutdown control. */
+      bool RESET : 1;               /**< Reset control. */
+      uint8_t reverse : 3;          /**< Bits reverse. */
+      max30102_mode_t mode : 3;     /**< Mode control. */
+   } B;
+} max30102_mode_config_t;
+
 /**
  * @brief max30102 fifo enumeration definition
  */
-typedef struct
+typedef union
 {
-   max30102_sample_averaging_t smpAve;    /**< Fifo configure: sample                  */
-   bool enRollOver;                       /**< Fifo configure: enable fifo rollover.   */
-   uint8_t fifoAlmostFull;                /**< Fifo configure: threshold of fifo.      */
-} max30102_fifo_t;
+   uint8_t R;
+   struct {
+      max30102_sample_averaging_t smpAve : 3;         /**< Fifo configure: sample                  */
+      bool enRollOver : 1;                            /**< Fifo configure: enable fifo rollover.   */
+      uint8_t fifoAlmostFull : 4;                     /**< Fifo configure: threshold of fifo.      */
+   } B;
+} max30102_fifo_config_t;
 
 /**
  * @brief max30102 information structure definition
  */
-typedef struct max30102_info_s
+typedef struct
 {
    char chip_name[32];              /**< Chip name                      */
    char manufacturer_name[32];      /**< Manufacturer name              */
@@ -165,8 +186,8 @@ typedef struct max30102_info_s
  */
 struct max30102_config {
    const struct i2c_dt_spec i2c;
-   max30102_fifo_t fifo;
-   max30102_mode_t mode;
+   max30102_fifo_config_t fifo;
+   max30102_mode_config_t mode;
    max30102_slot_t slot[4];
    max30102_spo2_config_t spo2;
    uint8_t ledPa[2];
