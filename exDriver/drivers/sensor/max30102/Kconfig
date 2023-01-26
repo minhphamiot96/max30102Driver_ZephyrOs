@@ -8,6 +8,7 @@ menuconfig MAX30102
 	default y
 	depends on DT_HAS_MAXIM_MAX30102_ENABLED
 	select I2C
+	select RING_BUFFER
 	help
 	  MAX30102 Pulse Oximeter and Heart Rate Sensor.
 

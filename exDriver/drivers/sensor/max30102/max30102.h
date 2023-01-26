@@ -11,6 +11,12 @@
 #include <zephyr/drivers/sensor.h>
 #include <zephyr/drivers/i2c.h>
 #include <zephyr/drivers/gpio.h>
+#include <zephyr/sys/ring_buffer.h>
+
+/** 
+ * @brief 
+ */
+#define MAX30102_NO_OF_ITEM (32U)
 
 /**
  * @brief max30102 bool enumeration definition
@@ -211,6 +217,10 @@ struct max30102_data {
    uint32_t raw[32];
    uint8_t map[32];
    max30102_led_t numChannel;
+   struct ring_buf rawRedRb;
+   uint32_t rawRed[MAX30102_NO_OF_ITEM];
+   struct ring_buf rawIRRb;
+   uint32_t rawIR[MAX30102_NO_OF_ITEM];
 };
 
 /**
@@ -249,7 +259,7 @@ static int max30102_int (const struct device *dev);
  *                - 4 power down failed
  * @note          none
  */
-static uint8_t max30102_deinit (const struct device *dev);
+static int max30102_deinit (const struct device *dev);
 
 /**
  * @brief         read the data
