@@ -10,8 +10,10 @@
 
 void main(void)
 {
-   struct sensor_value green;
-   const struct device *const dev = device_get_binding("MAX30102");
+   struct sensor_value irValue;
+   struct sensor_value redValue;
+
+   const struct device *const dev = DEVICE_DT_GET_ANY(maxim_max30102);
 
    if (dev == NULL)
    {
@@ -27,10 +29,12 @@ void main(void)
    while (1)
    {
       sensor_sample_fetch(dev);
-      sensor_channel_get(dev, SENSOR_CHAN_GREEN, &green);
+      sensor_channel_get(dev, SENSOR_CHAN_IR, &irValue);
+      sensor_channel_get(dev, SENSOR_CHAN_RED, &redValue);
 
       /* Print green LED data*/
-      printf("GREEN=%d\n", green.val1);
+      printf("IR value =%d\n", irValue.val1);
+      printf("Red value =%d\n", redValue.val1);
 
       k_sleep(K_MSEC(20));
    }

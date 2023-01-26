@@ -9,6 +9,9 @@
       "i2c.h": "c",
       "sensor.h": "c",
       "util.h": "c",
-      "max30102.h": "c"
+      "max30102.h": "c",
+      "mutex.h": "c",
+      "*.tcc": "c",
+      "ring_buffer.h": "c"
    }
 }

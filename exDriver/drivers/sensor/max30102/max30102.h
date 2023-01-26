@@ -214,9 +214,6 @@ struct max30102_config {
  * @brief         Data structures of this sensor. 
  */
 struct max30102_data {
-   uint32_t raw[32];
-   uint8_t map[32];
-   max30102_led_t numChannel;
    struct ring_buf rawRedRb;
    uint32_t rawRed[MAX30102_NO_OF_ITEM];
    struct ring_buf rawIRRb;

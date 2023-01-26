@@ -9,6 +9,7 @@
 #include <zephyr/devicetree.h>
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
+#include <zephyr/sys/mutex.h>
 
 #include "max30102.h"
 
@@ -48,6 +49,8 @@
 #define MAX30102_MAX_NUM_CHANNELS (2U)
 #define MAX30102_MAX_BYTES_PER_SAMPLE (MAX30102_MAX_NUM_CHANNELS * \
                                        MAX30102_BYTES_PER_CHANNEL)
+#define MAX30102_MAX_BYTES_FIFO (MAX30102_MAX_BYTES_PER_SAMPLE * \
+                                 MAX30102_NO_OF_ITEM)
 #define MAX30102_SLOT_LED_MASK (0x03U)
 #define MAX30102_FIFO_DATA_BITS (18U)
 #define MAX30102_FIFO_DATA_MASK ((1U << MAX30102_FIFO_DATA_BITS) - 1U)
@@ -55,6 +58,9 @@
 #define MAX30102_PART_ID (0x15U)
 
 LOG_MODULE_REGISTER(max30102, CONFIG_SENSOR_LOG_LEVEL);
+
+static uint8_t max30102RawDataBuff[MAX30102_MAX_BYTES_FIFO] = {0U};
+static SYS_MUTEX_DEFINE (mutex);
 
 static int max30102_channel_get(const struct device *dev,
                                 enum sensor_channel chan,
@@ -87,7 +93,10 @@ static int max30102_channel_get(const struct device *dev,
    }
 
    /** Get the data from ring buffer. */
-   ring_buf_item_get (ringBuf, rbType, rbValue, &dataRet, rbSize);
+   sys_mutex_lock (&mutex, K_FOREVER);
+   ring_buf_item_get (ringBuf, &rbType, &rbValue, &dataRet, &rbSize);
+   sys_mutex_unlock (&mutex);
+
    LOG_DBG ("Got item of type %u value &u of size %u dwords\n", rbType, rbValue, rbSize);
 
    val->val1 = dataRet;
@@ -102,6 +111,145 @@ static int max30102_sample_fetch(const struct device *dev,
 {
    struct max30102_data *data = dev->data;
    const struct max30102_config *config = dev->config;
+   int ret = 0;
+   uint8_t prev = 0U;
+   uint8_t readPtr = 0u;
+   uint8_t writePtr = 0u;
+   uint8_t noOfItems = 0u;
+   uint8_t k = 0u;
+   uint8_t shiftBit = 0u;
+   uint8_t counterLoop = 0u;
+   uint32_t rawRed = 0u;
+   uint32_t rawIR = 0u;
+
+   /** Determine whether i2c bus ready. */
+   if (!device_is_ready (config->i2c.bus)) 
+   {
+      LOG_ERR ("Bus device is not ready!");
+      return -ENODEV;
+   }
+
+   /** Read overflow counter */
+   ret = i2c_reg_write_byte_dt (&config->i2c, MAX30102_REG_FIFO_OVF, prev);
+   if (0 != ret)
+   {
+      LOG_ERR ("Read overflow counter failed.");
+      return ret;
+   }
+
+   /** Check overflow */
+   if (0 != prev)
+   {
+      LOG_DBG ("Fifo overrun.");
+   }
+
+   /** Read fifo read point */
+   ret = i2c_reg_write_byte_dt (&config->i2c, MAX30102_REG_FIFO_RD, readPtr);
+   if (0 != ret)
+   {
+      LOG_ERR ("Read fifo read point failed.");
+      return ret;
+   }
+
+   /** Read fifo write point */
+   ret = i2c_reg_write_byte_dt (&config->i2c, MAX30102_REG_FIFO_RD, writePtr);
+   if (0 != ret)
+   {
+      LOG_ERR ("Read fifo write point failed.");
+      return ret;
+   }
+
+   /** Check the size of buffer in sensor. */
+   if (writePtr > readPtr)
+   {
+      noOfItems = writePtr - readPtr;
+   }
+   else 
+   {
+      noOfItems = 32 + writePtr - readPtr;
+   }
+
+   /** Determine the size of each sample in internal FIFO of sensor. */
+   switch (config->mode.B.mode)
+   {
+   case MAX30102_MODE_HEART_RATE:
+      k = 3;
+      break;
+   case MAX30102_MODE_SPO2:
+      k = 6;
+      break;
+   case MAX30102_MODE_MULTI_LED:
+      k = 6;
+      break;
+   default:
+      LOG_ERR ("Mode is invalid.");
+      ret = -EIO;
+      return ret;
+   }
+
+   /** Read fifo. */
+   ret = i2c_read_dt (&config->i2c, max30102RawDataBuff, noOfItems * k);
+   if (0 != ret)
+   {
+      LOG_ERR ("read fifo data register failed.");
+      return ret;
+   }
+
+   /** Shift bit. */
+   if (MAX30102_PW_15BITS == config->spo2.B.ledPw)
+   {
+      shiftBit = 3u;
+   }
+   else if (MAX30102_PW_16BITS == config->spo2.B.ledPw)
+   {
+      shiftBit = 2u;
+   }
+   else if (MAX30102_PW_17BITS == config->spo2.B.ledPw)
+   {
+      shiftBit = 1u;
+   }
+   else 
+   {
+      shiftBit = 0u;
+   }
+
+   /** TODO: Comment */
+   for (counterLoop = 0u; counterLoop < noOfItems; counterLoop ++)
+   {
+      if (MAX30102_MODE_HEART_RATE == config->mode.B.mode)
+      {
+         rawRed = (max30102RawDataBuff[counterLoop * 3u + 0u] << 16u) |
+                  (max30102RawDataBuff[counterLoop * 3u + 1u] << 8u) |
+                  (max30102RawDataBuff[counterLoop * 3u + 2u] << 0u);
+         rawRed = rawRed >> shiftBit;
+
+         /** Update the Red value to Ring buffer of Red led. */
+         sys_mutex_lock (&mutex, K_FOREVER);
+         ring_buf_item_put (&data->rawRedRb, sizeof(max30102RawDataBuff[0]), 0, &rawRed, 1);
+         sys_mutex_unlock (&mutex);
+      }
+      else 
+      {
+         rawRed = (max30102RawDataBuff[counterLoop * 6u + 0u] << 16u) |
+                  (max30102RawDataBuff[counterLoop * 6u + 1u] << 8u) |
+                  (max30102RawDataBuff[counterLoop * 6u + 2u] << 0u);
+         rawRed = rawRed >> shiftBit;
+
+         rawIR = (max30102RawDataBuff[counterLoop * 6u + 3u] << 16u) |
+                  (max30102RawDataBuff[counterLoop * 6u + 4u] << 8u) |
+                  (max30102RawDataBuff[counterLoop * 6u + 5u] << 0u);
+         rawIR = rawIR >> shiftBit;
+
+         /** Update the Red value to Ring buffer of Red led and IR led. */
+         sys_mutex_lock (&mutex, K_FOREVER);
+         ret = ring_buf_item_put (&data->rawRedRb, sizeof(max30102RawDataBuff[0]), 0, &rawRed, 1);
+         ret = ring_buf_item_put (&data->rawIRRb, sizeof(max30102RawDataBuff[0]), 0, &rawIR, 1);
+         sys_mutex_unlock (&mutex);
+      }
+   }
+
+   /** Return status. */
+   return ret;
 }
 
 static const struct sensor_driver_api max30102_driver_api = {
