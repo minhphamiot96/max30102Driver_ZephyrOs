@@ -6,14 +6,19 @@
 
 #include <zephyr/kernel.h>
 #include <zephyr/drivers/sensor.h>
+#include <zephyr/sys/printk.h>
+#include <zephyr/usb/usb_device.h>
+#include <zephyr/drivers/uart.h>
 #include <stdio.h>
 
 void main(void)
 {
+   int ret = 0;
    struct sensor_value irValue;
    struct sensor_value redValue;
 
    const struct device *const dev = DEVICE_DT_GET_ANY(maxim_max30102);
+	const struct device *const console = DEVICE_DT_GET(DT_CHOSEN(zephyr_console));
 
    if (dev == NULL)
    {
@@ -25,6 +30,11 @@ void main(void)
       printf("max30102 device %s is not ready\n", dev->name);
       return;
    }
+
+   ret = usb_enable(NULL);
+	if (ret != 0) {
+		return;
+	}
 
    while (1)
    {

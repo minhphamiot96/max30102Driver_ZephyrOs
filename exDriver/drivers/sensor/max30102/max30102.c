@@ -270,15 +270,6 @@ static int max30102_int(const struct device *dev)
    ring_buf_item_init (&data->rawRedRb, MAX30102_NO_OF_ITEM, data->rawRed);
    ring_buf_item_init (&data->rawIRRb, MAX30102_NO_OF_ITEM, data->rawIR);
 
-   /** Config mode and slot. */
-#ifdef CONFIG_MAX30102_HEART_RATE_MODE
-   config->mode.B.mode = MAX30102_MODE_HEART_RATE;
-#elif CONFIG_MAX30102_SPO2_MODE
-   config->mode.B.mode = MAX30102_MODE_SPO2;
-#elif CONFIG_MAX30102_MULTI_LED_MODE
-   config->mode.B.mode = MAX30102_MODE_MULTI_LED;
-#endif
-
    /** Determine whether i2c bus ready. */
    if (!device_is_ready (config->i2c.bus)) 
    {
@@ -404,6 +395,21 @@ static int max30102_deinit (const struct device *dev)
    /** FIXME: Deinit i2c bus used for this sensor. */
 
    return ret;
+}
+
+static uint8_t max30102_read_temperature (const struct device *dev, uint16_t *raw, float *temp)
+{
+   struct max30102_config *config = dev->config;
+   struct max30102_data *data = dev->data;
+
+   /** Determine whether i2c bus ready. */
+   if (!device_is_ready(&config->i2c))
+   {
+      LOG_ERR ("Bus device is not ready!");
+      return -ENODEV;
+   }
+
+   
 }
 
 static struct max30102_data max30102_data;              

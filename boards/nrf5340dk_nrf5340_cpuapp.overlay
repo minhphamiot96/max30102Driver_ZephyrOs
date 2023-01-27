@@ -2,7 +2,6 @@
  * Copyright (c) 2022 Nordic Semiconductor ASA
  * SPDX-License-Identifier: Apache-2.0
  */
-
 &i2c1 {
    status = "okay";
    max30102@57 {
