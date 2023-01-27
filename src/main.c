@@ -31,10 +31,10 @@ void main(void)
       return;
    }
 
-   ret = usb_enable(NULL);
-	if (ret != 0) {
-		return;
-	}
+   // ret = usb_enable(NULL);
+	// if (ret != 0) {
+	// 	return;
+	// }
 
    while (1)
    {
