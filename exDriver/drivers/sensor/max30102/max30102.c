@@ -410,7 +410,7 @@ static struct max30102_data max30102_data;
 static const struct max30102_config max30102_config = { 
    .i2c = I2C_DT_SPEC_INST_GET(0),                          
    .fifo.B.smpAve = CONFIG_MAX30102_SMP_AVE,                   
-   .fifo.B.enRollOver = CONFIG_MAX30102_FIFO_ROLLOVER_EN,      
+   .fifo.B.enRollOver = false,      
    .fifo.B.fifoAlmostFull = CONFIG_MAX30102_FIFO_A_FULL,       
    .spo2.B.adcRange = CONFIG_MAX30102_ADC_RGE,                 
    .spo2.B.sampleRate = CONFIG_MAX30102_SR,                    

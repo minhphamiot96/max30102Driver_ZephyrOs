@@ -7,7 +7,7 @@ list(APPEND ZEPHYR_EXTRA_MODULES
   )
 
 cmake_minimum_required(VERSION 3.20.0)
-set (BOARD nrf52840dk_nrf52840)
+set (BOARD nrf5340dk_nrf5340_cpuapp_ns)
 
 find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
 project(max30102DeviceDriver)

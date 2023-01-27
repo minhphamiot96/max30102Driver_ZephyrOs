@@ -3,7 +3,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-&i2c0 {
+&i2c1 {
+   status = "okay";
+
    max30102@57 {
       compatible = "maxim,max30102";
       reg = <0x57>;
