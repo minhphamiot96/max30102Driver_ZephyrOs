@@ -59,7 +59,7 @@ config MAX30102_FIFO_A_FULL
 
 choice MAX30102_MODE
 	prompt "Mode control"
-	default MAX30102_MULTI_LED_MODE
+	default MAX30102_SPO2_MODE
 
 config MAX30102_HEART_RATE_MODE
 	bool "Heart rate mode"
