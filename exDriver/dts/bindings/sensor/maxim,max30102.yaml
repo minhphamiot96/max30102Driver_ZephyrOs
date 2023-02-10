@@ -3,7 +3,16 @@
 
 description: MAX30102 heart rate sensor
 compatible: "maxim,max30102"
-include: [sensor-device.yaml,i2c-device.yaml]
+include: [sensor-device.yaml, i2c-device.yaml]
 properties:
   reg:
     required: true
+
+  int-gpios:
+    type: phandle-array
+    required: false
+    description: |
+        The alert pin defaults to active low when produced by the
+        sensor, and is open-drain.  A pull-up may be appropriate.  The
+        property value should ensure the flags properly describe the
+        signal that is presented to the driver.

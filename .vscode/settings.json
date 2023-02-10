@@ -13,5 +13,8 @@
       "mutex.h": "c",
       "*.tcc": "c",
       "ring_buffer.h": "c"
+   },
+   "nrf-connect.debugging.bindings": {
+      "${workspaceFolder}/build": "Launch build"
    }
 }

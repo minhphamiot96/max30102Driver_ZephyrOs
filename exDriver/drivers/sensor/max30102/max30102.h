@@ -13,6 +13,53 @@
 #include <zephyr/drivers/gpio.h>
 #include <zephyr/sys/ring_buffer.h>
 
+#define MAX30102_REG_INT_STS1 (0x00U)
+#define MAX30102_REG_INT_STS2 (0x01U)
+#define MAX30102_REG_INT_EN1 (0x02U)
+#define MAX30102_REG_INT_EN2 (0x03U)
+#define MAX30102_REG_FIFO_WR (0x04U)
+#define MAX30102_REG_FIFO_OVF (0x05U)
+#define MAX30102_REG_FIFO_RD (0x06U)
+#define MAX30102_REG_FIFO_DATA (0x07U)
+#define MAX30102_REG_FIFO_CFG (0x08U)
+#define MAX30102_REG_MODE_CFG (0x09U)
+#define MAX30102_REG_SPO2_CFG (0x0AU)
+#define MAX30102_REG_LED1_PA (0x0CU)
+#define MAX30102_REG_LED2_PA (0x0DU)
+#define MAX30102_REG_MULTI_LED (0x11U)
+#define MAX30102_REG_TINT (0x1FU)
+#define MAX30102_REG_TFRAC (0x20U)
+#define MAX30102_REG_TEMP_CFG (0x21U)
+#define MAX30102_REG_REV_ID (0xFEU)
+#define MAX30102_REG_PART_ID (0xFFU)
+
+#define MAX30102_FIFO_CFG_SMP_AVE_SHIFT (5U)
+#define MAX30102_FIFO_CFG_FIFO_FULL_SHIFT (0U)
+#define MAX30102_FIFO_CFG_ROLLOVER_EN_MASK (1U << 4)
+
+#define MAX30102_MODE_CFG_SHDN_MASK (1U << 7)
+#define MAX30102_MODE_CFG_RESET_MASK (1U << 6)
+
+#define MAX30102_SPO2_ADC_RGE_SHIFT (5U)
+#define MAX30102_SPO2_SR_SHIFT (2U)
+#define MAX30102_SPO2_PW_SHIFT (0U)
+
+#define MAX30102_INT_PPG_MASK (1U << 6)
+#define MAX30102_BYTES_PER_CHANNEL (3U)
+#define MAX30102_MAX_NUM_CHANNELS (2U)
+#define MAX30102_MAX_BYTES_PER_SAMPLE (MAX30102_MAX_NUM_CHANNELS * \
+                                       MAX30102_BYTES_PER_CHANNEL)
+#define MAX30102_MAX_BYTES_FIFO (MAX30102_MAX_BYTES_PER_SAMPLE * \
+                                 MAX30102_NO_OF_ITEM)
+#define MAX30102_SLOT_LED_MASK (0x03U)
+#define MAX30102_FIFO_DATA_BITS (18U)
+#define MAX30102_FIFO_DATA_MASK ((1U << MAX30102_FIFO_DATA_BITS) - 1U)
+
+#define MAX30102_PART_ID (0x15U)
+
+#define MAX30102_THREAD_PRIORITY (10U)
+#define MAX30102_THREAD_STACK_SIZE (1024U)
+
 /** 
  * @brief 
  */
@@ -52,16 +99,16 @@ typedef enum
    MAX30102_INTERRUPT_STATUS_DIE_TEMP_RDY = 1,        /**< Internal temperature ready flag      */
 } max30102_interrupt_status_t;
 
-/**
- * @brief max30102 interrupt enumeration definition
- */
-typedef enum
-{
-   MAX30102_INTERRUPT_FIFO_FULL_EN    = 7,            /**< Fifo almost full enable                    */
-   MAX30102_INTERRUPT_PPG_RDY_EN      = 6,            /**< New fifo data ready enable                 */
-   MAX30102_INTERRUPT_ALC_OVF_EN      = 5,            /**< Ambient light cancellation overflow enable */
-   MAX30102_INTERRUPT_DIE_TEMP_RDY_EN = 1,            /**< Internal temperature enable                */
-} max30102_interrupt_t;
+// /**
+//  * @brief max30102 interrupt enumeration definition
+//  */
+// typedef enum
+// {
+//    MAX30102_INTERRUPT_FIFO_FULL_EN    = 7,            /**< Fifo almost full enable                    */
+//    MAX30102_INTERRUPT_PPG_RDY_EN      = 6,            /**< New fifo data ready enable                 */
+//    MAX30102_INTERRUPT_ALC_OVF_EN      = 5,            /**< Ambient light cancellation overflow enable */
+//    MAX30102_INTERRUPT_DIE_TEMP_RDY_EN = 1,            /**< Internal temperature enable                */
+// } max30102_interrupt_t;
 
 /**
  * @brief max30102 spo2 adc range enumeration definition
@@ -118,10 +165,10 @@ typedef union
 {
    uint8_t R; 
    struct {
-      uint8_t reverse : 1;                            /**< Bit reverse.                                  */
-      max30102_spo2_adc_range_t adcRange : 2;         /**< SpO2 ADC Range Control. (18 bit resolution)   */
-      max30102_spo2_sample_rate_t sampleRate : 3;     /**< SpO2 Sample Rate Control.                     */
       max30102_pw_control_t  ledPw : 2;               /**< LED Pulse Width Control.                      */
+      max30102_spo2_sample_rate_t sampleRate : 3;     /**< SpO2 Sample Rate Control.                     */
+      max30102_spo2_adc_range_t adcRange : 2;         /**< SpO2 ADC Range Control. (18 bit resolution)   */
+      uint8_t reverse : 1;                            /**< Bit reverse.                                  */
    } B;
 } max30102_spo2_config_t;
 /**
@@ -162,10 +209,10 @@ typedef union
 {
    uint8_t R;
    struct {
-      bool SHDN : 1;                /**< Shutdown control. */
-      bool RESET : 1;               /**< Reset control. */
-      uint8_t reverse : 3;          /**< Bits reverse. */
       max30102_mode_t mode : 3;     /**< Mode control. */
+      uint8_t reverse : 3;          /**< Bits reverse. */
+      bool RESET : 1;               /**< Reset control. */
+      bool SHDN : 1;                /**< Shutdown control. */
    } B;
 } max30102_mode_config_t;
 
@@ -176,9 +223,9 @@ typedef union
 {
    uint8_t R;
    struct {
-      max30102_sample_averaging_t smpAve : 3;         /**< Fifo configure: sample                  */
-      bool enRollOver : 1;                            /**< Fifo configure: enable fifo rollover.   */
       uint8_t fifoAlmostFull : 4;                     /**< Fifo configure: threshold of fifo.      */
+      bool enRollOver : 1;                            /**< Fifo configure: enable fifo rollover.   */
+      max30102_sample_averaging_t smpAve : 3;         /**< Fifo configure: sample                  */
    } B;
 } max30102_fifo_config_t;
 
@@ -198,22 +245,54 @@ typedef struct
    uint32_t driver_version;         /**< Driver version                 */
 } max30102_info_t;
 
+/**
+ * @brief max30102 interrupt1 configration. 
+ */
+typedef union 
+{
+   uint8_t R;
+   struct {
+      uint8_t reserve      : 5;
+      bool alc_ovf_en      : 1;
+      bool ppg_rdy_en      : 1;
+      bool a_full_en       : 1;
+   } B;
+} max30102_interrupt1_t;
+
+/**
+ * @brief max30102 interrupt2 configration. 
+ */
+typedef union 
+{
+   uint8_t R;
+   struct {
+      uint8_t reserve1     : 1;
+      bool die_temp_rdy_en : 1;
+      uint8_t reserve2     : 6;
+   } B;
+} max30102_interrupt2_t;
+
 /** 
  * @brief         Configuration data structures.
  */
 struct max30102_config {
-   const struct i2c_dt_spec i2c;
+   struct i2c_dt_spec i2c;
+   max30102_interrupt1_t irq1;
+   max30102_interrupt2_t irq2;
    max30102_fifo_config_t fifo;
    max30102_mode_config_t mode;
    max30102_slot_t slot[4];
    max30102_spo2_config_t spo2;
    uint8_t ledPa[2];
+   struct gpio_dt_spec int_gpio;
 };
 
 /** 
  * @brief         Data structures of this sensor. 
  */
 struct max30102_data {
+   struct k_sem sem;
+   struct gpio_callback intIrq;
    struct ring_buf rawRedRb;
    uint32_t rawRed[MAX30102_NO_OF_ITEM];
    struct ring_buf rawIRRb;
@@ -221,14 +300,19 @@ struct max30102_data {
 };
 
 /**
- * @brief         Get chip's information
- * @param[out]    *info points to a max30102 info structure
+ * @brief         Initialize the chip
+ * @param[in]     *handle points to a max30102 handle structure
  * @return        status code
  *                - 0 success
+ *                - 1 iic initialization failed
  *                - 2 handle is NULL
+ *                - 3 linked functions is NULL
+ *                - 4 id is invalid
+ *                - 5 reset failed
+ *                - 6 reset fifo failed
  * @note          none
  */
-static uint8_t max30102_info (const struct device *dev, max30102_info_t *info);
+int max30102_setup_interrupt (const struct device * dev);
 
 /**
  * @brief         Initialize the chip
@@ -317,510 +401,7 @@ static uint8_t max30102_get_interrupt_status (  const struct device *dev,
                                                 max30102_interrupt_status_t status, 
                                                 max30102_bool_t *enable);
 
-/**
- * @brief         Set the interrupt bool
- * @param[in]     *handle points to a max30102 handle structure
- * @param[in]     type is the interrupt type
- * @param[in]     enable is a bool value
- * @return        status code
- *                - 0 success
- *                - 1 set interrupt failed
- *                - 2 handle is NULL
- *                - 3 handle is not initialized
- * @note          none
- */
-static uint8_t max30102_set_interrupt (const struct device *dev, max30102_interrupt_t type, max30102_bool_t enable);
 
-/**
- * @brief         Get the interrupt bool
- * @param[in]     *handle points to a max30102 handle structure
- * @param[in]     type is the interrupt type
- * @param[out]    *enable points to a bool value buffer
- * @return        status code
- *                - 0 success
- *                - 1 get interrupt failed
- *                - 2 handle is NULL
- *                - 3 handle is not initialized
- * @note          none
- */
-static uint8_t max30102_get_interrupt (const struct device *dev, max30102_interrupt_t type, max30102_bool_t *enable);
-
-/**
- * @brief         Set the fifo write pointer
- * @param[in]     *handle points to a max30102 handle structure
- * @param[in]     pointer is the written pointer
- * @return        status code
- *                - 0 success
- *                - 1 set fifo write pointer failed
- *                - 2 handle is NULL
- *                - 3 handle is not initialized
- *                - 4 pointer can't be over 0x1F
- * @note          pointer <= 0x1F
- */
-static uint8_t max30102_set_fifo_write_pointer (const struct device *dev, uint8_t pointer);
-
-/**
- * @brief         Get the fifo write pointer
- * @param[in]     *handle points to a max30102 handle structure
- * @param[out]    *pointer points to a pointer buffer
- * @return        status code
- *                - 0 success
- *                - 1 get fifo write pointer failed
- *                - 2 handle is NULL
- *                - 3 handle is not initialized
- * @note          nonw
- */
-static uint8_t max30102_get_fifo_write_pointer (const struct device *dev, uint8_t *pointer);
-
-/**
- * @brief         Set the fifo overflow counter
- * @param[in]     *handle points to a max30102 handle structure
- * @param[in]     counter is the overflow counter
- * @return        status code
- *                - 0 success
- *                - 1 set fifo overflow counter failed
- *                - 2 handle is NULL
- *                - 3 handle is not initialized
- *                - 4 counter can't be over 0x1F
- * @note          counter <= 0x1F
- */
-static uint8_t max30102_set_fifo_overflow_counter (const struct device *dev, uint8_t counter);
-
-/**
- * @brief         Get the fifo overflow counter
- * @param[in]     *handle points to a max30102 handle structure
- * @param[out]    *counter points to a counter buffer
- * @return        status code
- *                - 0 success
- *                - 1 get fifo overflow counter failed
- *                - 2 handle is NULL
- *                - 3 handle is not initialized
- * @note          nonw
- */
-static uint8_t max30102_get_fifo_overflow_counter (const struct device *dev, uint8_t *counter);
-
-/**
- * @brief         Set the fifo read pointer
- * @param[in]     *handle points to a max30102 handle structure
- * @param[in]     pointer is the read pointer
- * @return        status code
- *                - 0 success
- *                - 1 set fifo read pointer failed
- *                - 2 handle is NULL
- *                - 3 handle is not initialized
- *                - 4 pointer can't be over 0x1F
- * @note          pointer <= 0x1F
- */
-static uint8_t max30102_set_fifo_read_pointer (const struct device *dev, uint8_t pointer);
-
-/**
- * @brief         Get the fifo read pointer
- * @param[in]     *handle points to a max30102 handle structure
- * @param[out]    *pointer points to a pointer buffer
- * @return        status code
- *                - 0 success
- *                - 1 get fifo read pointer failed
- *                - 2 handle is NULL
- *                - 3 handle is not initialized
- * @note          none
- */
-static uint8_t max30102_get_fifo_read_pointer (const struct device *dev, uint8_t *pointer);
-
-/**
- * @brief         Set the fifo data
- * @param[in]     *handle points to a max30102 handle structure
- * @param[in]     data is the fifo data
- * @return        status code
- *                - 0 success
- *                - 1 set fifo data failed
- *                - 2 handle is NULL
- *                - 3 handle is not initialized
- * @note          none
- */
-static uint8_t max30102_set_fifo_data (const struct device *dev, uint8_t data);
-
-/**
- * @brief         Get the fifo data
- * @param[in]     *handle points to a max30102 handle structure
- * @param[out]    *data points to a fifo data buffer
- * @return        status code
- *                - 0 success
- *                - 1 get fifo data failed
- *                - 2 handle is NULL
- *                - 3 handle is not initialized
- * @note          none
- */
-static uint8_t max30102_get_fifo_data (const struct device *dev, uint8_t *data);
-
-/**
- * @brief         set the fifo sample averaging
- * @param[in]     *handle points to a max30102 handle structure
- * @param[in]     sample is the fifo sample averaging
- * @return        status code
- *                - 0 success
- *                - 1 set fifo sample averaging failed
- *                - 2 handle is NULL
- *                - 3 handle is not initialized
- * @note          none
- */
-static uint8_t max30102_set_fifo_sample_averaging (const struct device *dev, max30102_sample_averaging_t sample);
-
-/**
- * @brief         Get the fifo sample averaging
- * @param[in]     *handle points to a max30102 handle structure
- * @param[out]    *sample points to a fifo sample averaging buffer
- * @return        status code
- *                - 0 success
- *                - 1 get fifo sample averaging failed
- *                - 2 handle is NULL
- *                - 3 handle is not initialized
- * @note          none
- */
-static uint8_t max30102_get_fifo_sample_averaging (const struct device *dev, max30102_sample_averaging_t *sample);
-
-/**
- * @brief         Enable or disable the fifo roll 
- * @param[in]     *handle points to a max30102 handle structure
- * @param[in]     enable is a bool value
- * @return        status code
- *                - 0 success
- *                - 1 set fifo roll failed
- *                - 2 handle is NULL
- *                - 3 handle is not initialized
- * @note          none
- */
-static uint8_t max30102_set_fifo_roll (const struct device *dev, max30102_bool_t enable);
-
-/**
- * @brief         Get the fifo roll status
- * @param[in]     *handle points to a max30102 handle structure
- * @param[out]    *enable points to a bool value buffer
- * @return        status code
- *                - 0 success
- *                - 1 get fifo roll failed
- *                - 2 handle is NULL
- *                - 3 handle is not initialized
- * @note          none
- */
-static uint8_t max30102_get_fifo_roll (const struct device *dev, max30102_bool_t *enable);
-
-/**
- * @brief         Set the fifo almost full value
- * @param[in]     *handle points to a max30102 handle structure
- * @param[in]     value is the fifo almost full value
- * @return        status code
- *                - 0 success
- *                - 1 set fifo almost full failed
- *                - 2 handle is NULL
- *                - 3 handle is not initialized
- *                - 4 value can't be over 0xF
- * @note          none
- */
-static uint8_t max30102_set_fifo_almost_full (const struct device *dev, uint8_t value);
-
-/**
- * @brief         Get the fifo almost full value
- * @param[in]     *handle points to a max30102 handle structure
- * @param[out]    *value points to a fifo almost full value buffer
- * @return        status code
- *                - 0 success
- *                - 1 get fifo almost full failed
- *                - 2 handle is NULL
- *                - 3 handle is not initialized
- * @note          none
- */
-static uint8_t max30102_get_fifo_almost_full (const struct device *dev, uint8_t *value);
-
-/**
- * @brief         Set the shutdown
- * @param[in]     *handle points to a max30102 handle structure
- * @param[in]     enable is a bool value
- * @return        status code
- *                - 0 success
- *                - 1 set shutdown failed
- *                - 2 handle is NULL
- *                - 3 handle is not initialized
- * @note          none
- */
-static uint8_t max30102_set_shutdown (const struct device *dev, max30102_bool_t enable);
-
-/**
- * @brief         Get the shutdown
- * @param[in]     *handle points to a max30102 handle structure
- * @param[out]    *enable points to a bool value buffer
- * @return        status code
- *                - 0 success
- *                - 1 get shutdown failed
- *                - 2 handle is NULL
- *                - 3 handle is not initialized
- * @note          none
- */
-static uint8_t max30102_get_shutdown (const struct device *dev, max30102_bool_t *enable);
-
-/**
- * @brief         Reset the chip
- * @param[in]     *handle points to a max30102 handle structure
- * @return        status code
- *                - 0 success
- *                - 1 reset failed
- *                - 2 handle is NULL
- *                - 3 handle is not initialized
- * @note          none
- */
-static uint8_t max30102_reset (const struct device *dev);
-
-/**
- * @brief         Set the mode
- * @param[in]     *handle points to a max30102 handle structure
- * @param[in]     mode is the chip mode
- * @return        status code
- *                - 0 success
- *                - 1 set mode failed
- *                - 2 handle is NULL
- *                - 3 handle is not initialized
- * @note          none
- */
-static uint8_t max30102_set_mode (const struct device *dev, max30102_mode_t mode);
-
-/**
- * @brief         Get the mode
- * @param[in]     *handle points to a max30102 handle structure
- * @param[out]    *mode points to a chip mode buffer
- * @return        status code
- *                - 0 success
- *                - 1 get mode failed
- *                - 2 handle is NULL
- *                - 3 handle is not initialized
- * @note          none
- */
-static uint8_t max30102_get_mode (const struct device *dev, max30102_mode_t *mode);
-
-/**
- * @brief         Set the spo2 adc range
- * @param[in]     *handle points to a max30102 handle structure
- * @param[in]     range is the spo2 adc range
- * @return        status code
- *                - 0 success
- *                - 1 set spo2 adc range failed
- *                - 2 handle is NULL
- *                - 3 handle is not initialized
- * @note          none
- */
-static uint8_t max30102_set_spo2_adc_range (const struct device *dev, max30102_spo2_adc_range_t range);
-
-/**
- * @brief         Get the spo2 adc range
- * @param[in]     *handle points to a max30102 handle structure
- * @param[out]    *range points to an spo2 adc range buffer
- * @return        status code
- *                - 0 success
- *                - 1 get spo2 adc range failed
- *                - 2 handle is NULL
- *                - 3 handle is not initialized
- * @note          none
- */
-static uint8_t max30102_get_spo2_adc_range (const struct device *dev, max30102_spo2_adc_range_t *range);
-
-/**
- * @brief         Set the spo2 sample rate
- * @param[in]     *handle points to a max30102 handle structure
- * @param[in]     rate is the spo2 sample rate
- * @return        status code
- *                - 0 success
- *                - 1 set spo2 sample rate failed
- *                - 2 handle is NULL
- *                - 3 handle is not initialized
- * @note          none
- */
-static uint8_t max30102_set_spo2_sample_rate (const struct device *dev, max30102_spo2_sample_rate_t rate);
-
-/**
- * @brief         Get the spo2 sample rate
- * @param[in]     *handle points to a max30102 handle structure
- * @param[out]    *rate points to an spo2 sample rate buffer
- * @return        status code
- *                - 0 success
- *                - 1 get spo2 sample rate failed
- *                - 2 handle is NULL
- *                - 3 handle is not initialized
- * @note          none
- */
-static uint8_t max30102_get_spo2_sample_rate (const struct device *dev, max30102_spo2_sample_rate_t *rate);
-
-/**
- * @brief         Set the adc resolution
- * @param[in]     *handle points to a max30102 handle structure
- * @param[in]     resolution is the adc resolution
- * @return        status code
- *                - 0 success
- *                - 1 set adc resolution failed
- *                - 2 handle is NULL
- *                - 3 handle is not initialized
- * @note          none
- */
-static uint8_t max30102_set_adc_resolution (const struct device *dev, max30102_adc_resolution_t resolution);
-
-/**
- * @brief         Get the adc resolution
- * @param[in]     *handle points to a max30102 handle structure
- * @param[out]    *resolution points to an adc resolution buffer
- * @return        status code
- *                - 0 success
- *                - 1 get adc resolution failed
- *                - 2 handle is NULL
- *                - 3 handle is not initialized
- * @note          none
- */
-static uint8_t max30102_get_adc_resolution (const struct device *dev, max30102_adc_resolution_t *resolution);
-
-/**
- * @brief         Set the red led pulse amplitude
- * @param[in]     *handle points to a max30102 handle structure
- * @param[in]     amp is the red led pulse amplitude
- * @return        status code
- *                - 0 success
- *                - 1 set led red pulse amplitude failed
- *                - 2 handle is NULL
- *                - 3 handle is not initialized
- * @note          none
- */
-static uint8_t max30102_set_led_red_pulse_amplitude (const struct device *dev, uint8_t amp);
-
-/**
- * @brief         Get the red led pulse amplitude
- * @param[in]     *handle points to a max30102 handle structure
- * @param[out]    *amp points to a red led pulse amplitude buffer
- * @return        status code
- *                - 0 success
- *                - 1 get led red pulse amplitude failed
- *                - 2 handle is NULL
- *                - 3 handle is not initialized
- * @note          none
- */
-static uint8_t max30102_get_led_red_pulse_amplitude (const struct device *dev, uint8_t *amp);
-
-/**
- * @brief         Set the ir led pulse amplitude
- * @param[in]     *handle points to a max30102 handle structure
- * @param[in]     amp is the ir led pulse amplitude
- * @return        status code
- *                - 0 success
- *                - 1 set led ir pulse amplitude failed
- *                - 2 handle is NULL
- *                - 3 handle is not initialized
- * @note          none
- */
-static uint8_t max30102_set_led_ir_pulse_amplitude (const struct device *dev, uint8_t amp);
-
-/**
- * @brief         Get the ir led pulse amplitude
- * @param[in]     *handle points to a max30102 handle structure
- * @param[out]    *amp points to an ir led pulse amplitude buffer
- * @return        status code
- *                - 0 success
- *                - 1 get led ir pulse amplitude failed
- *                - 2 handle is NULL
- *                - 3 handle is not initialized
- * @note          none
- */
-static uint8_t max30102_get_led_ir_pulse_amplitude (const struct device *dev, uint8_t *amp);
-
-/**
- * @brief         Set the led slot
- * @param[in]     *handle points to a max30102 handle structure
- * @param[in]     slot is the slot number
- * @param[in]     led is the led mode
- * @return        status code
- *                - 0 success
- *                - 1 set slot failed
- *                - 2 handle is NULL
- *                - 3 handle is not initialized
- * @note          none
- */
-static uint8_t max30102_set_slot (const struct device *dev, max30102_slot_t slot, max30102_led_t led);
-
-/**
- * @brief         Get the led slot
- * @param[in]     *handle points to a max30102 handle structure
- * @param[in]     slot is the slot number
- * @param[out]    *led points to a led mode buffer
- * @return        status code
- *                - 0 success
- *                - 1 get slot failed
- *                - 2 handle is NULL
- *                - 3 handle is not initialized
- * @note          none
- */
-static uint8_t max30102_get_slot (const struct device *dev, max30102_slot_t slot, max30102_led_t *led);
-
-/**
- * @brief         Enable or disable die temperature
- * @param[in]     *handle points to a max30102 handle structure
- * @param[in]     enable is a bool value
- * @return        status code
- *                - 0 success
- *                - 1 set die temperature failed
- *                - 2 handle is NULL
- *                - 3 handle is not initialized
- * @note          none
- */
-static uint8_t max30102_set_die_temperature (const struct device *dev, max30102_bool_t enable);
-
-/**
- * @brief         Get the die temperature status
- * @param[in]     *handle points to a max30102 handle structure
- * @param[out]    *enable points to a bool value buffer
- * @return        status code
- *                - 0 success
- *                - 1 get die temperature failed
- *                - 2 handle is NULL
- *                - 3 handle is not initialized
- * @note          none
- */
-static uint8_t max30102_get_die_temperature (const struct device *dev, max30102_bool_t *enable);
-
-/**
- * @brief         Get the chip id
- * @param[in]     *handle points to a max30102 handle structure
- * @param[out]    *revision_id points to a revision id buffer
- * @param[out]    *part_id points to a part id buffer
- * @return        status code
- *                - 0 success
- *                - 1 get id failed
- *                - 2 handle is NULL
- *                - 3 handle is not initialized
- * @note          none
- */
-static uint8_t max30102_get_id (const struct device *dev, uint8_t *revision_id, uint8_t *part_id);
-
-/**
- * @brief         Set the chip register
- * @param[in]     *handle points to a max30102 handle structure
- * @param[in]     reg is the iic register address
- * @param[in]     *buf points to a data buffer
- * @param[in]     len is the data buffer length
- * @return        status code
- *                - 0 success
- *                - 1 write failed
- *                - 2 handle is NULL
- *                - 3 handle is not initialized
- * @note          none
- */
-static uint8_t max30102_set_reg (const struct device *dev, uint8_t reg, uint8_t *buf, uint16_t len);
-
-/**
- * @brief         Get the chip register
- * @param[in]     *handle points to a max30102 handle structure
- * @param[in]     reg is the iic register address
- * @param[out]    *buf points to a data buffer
- * @param[in]     len is the data buffer length
- * @return        status code
- *                - 0 success
- *                - 1 read failed
- *                - 2 handle is NULL
- *                - 3 handle is not initialized
- * @note          none
- */
-static uint8_t max30102_get_reg (const struct device *dev, uint8_t reg, uint8_t *buf, uint16_t len);
+static void max30102_irqHandler (const struct device * dev, struct gpio_callback *cb, uint32_t pins);
 
 #endif /* ZEPHYR_DRIVERS_SENSOR_MAXIM_MAX30102_H_ */

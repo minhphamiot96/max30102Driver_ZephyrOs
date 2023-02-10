@@ -13,50 +13,6 @@
 
 #include "max30102.h"
 
-#define MAX30102_REG_INT_STS1 (0x00U)
-#define MAX30102_REG_INT_STS2 (0x01U)
-#define MAX30102_REG_INT_EN1 (0x02U)
-#define MAX30102_REG_INT_EN2 (0x03U)
-#define MAX30102_REG_FIFO_WR (0x04U)
-#define MAX30102_REG_FIFO_OVF (0x05U)
-#define MAX30102_REG_FIFO_RD (0x06U)
-#define MAX30102_REG_FIFO_DATA (0x07U)
-#define MAX30102_REG_FIFO_CFG (0x08U)
-#define MAX30102_REG_MODE_CFG (0x09U)
-#define MAX30102_REG_SPO2_CFG (0x0AU)
-#define MAX30102_REG_LED1_PA (0x0CU)
-#define MAX30102_REG_LED2_PA (0x0DU)
-#define MAX30102_REG_MULTI_LED (0x11U)
-#define MAX30102_REG_TINT (0x1FU)
-#define MAX30102_REG_TFRAC (0x20U)
-#define MAX30102_REG_TEMP_CFG (0x21U)
-#define MAX30102_REG_REV_ID (0xFEU)
-#define MAX30102_REG_PART_ID (0xFFU)
-
-#define MAX30102_FIFO_CFG_SMP_AVE_SHIFT (5U)
-#define MAX30102_FIFO_CFG_FIFO_FULL_SHIFT (0U)
-#define MAX30102_FIFO_CFG_ROLLOVER_EN_MASK (1U << 4)
-
-#define MAX30102_MODE_CFG_SHDN_MASK (1U << 7)
-#define MAX30102_MODE_CFG_RESET_MASK (1U << 6)
-
-#define MAX30102_SPO2_ADC_RGE_SHIFT (5U)
-#define MAX30102_SPO2_SR_SHIFT (2U)
-#define MAX30102_SPO2_PW_SHIFT (0U)
-
-#define MAX30102_INT_PPG_MASK (1U << 6)
-#define MAX30102_BYTES_PER_CHANNEL (3U)
-#define MAX30102_MAX_NUM_CHANNELS (2U)
-#define MAX30102_MAX_BYTES_PER_SAMPLE (MAX30102_MAX_NUM_CHANNELS * \
-                                       MAX30102_BYTES_PER_CHANNEL)
-#define MAX30102_MAX_BYTES_FIFO (MAX30102_MAX_BYTES_PER_SAMPLE * \
-                                 MAX30102_NO_OF_ITEM)
-#define MAX30102_SLOT_LED_MASK (0x03U)
-#define MAX30102_FIFO_DATA_BITS (18U)
-#define MAX30102_FIFO_DATA_MASK ((1U << MAX30102_FIFO_DATA_BITS) - 1U)
-
-#define MAX30102_PART_ID (0x15U)
-
 LOG_MODULE_REGISTER(max30102, CONFIG_SENSOR_LOG_LEVEL);
 
 static uint8_t max30102RawDataBuff[MAX30102_MAX_BYTES_FIFO] = {0U};
@@ -66,7 +22,7 @@ static int max30102_channel_get(const struct device *dev,
                                 enum sensor_channel chan,
                                 struct sensor_value *val)
 {
-   struct max30102_data *data = dev->data;
+   struct max30102_data *data = (struct max30102_data *)dev->data;
    struct ring_buf *ringBuf = NULL;
    uint32_t *buffer = NULL;
    uint32_t dataRet = 0U;
@@ -80,12 +36,12 @@ static int max30102_channel_get(const struct device *dev,
    switch (chan)
    {
    case SENSOR_CHAN_IR:
-      ringBuf = &data->rawRedRb;
-      buffer = data->rawRed;
-      break;
-   case SENSOR_CHAN_RED:
       ringBuf = &data->rawIRRb;
       buffer = data->rawIR;
+      break;
+   case SENSOR_CHAN_RED:
+      ringBuf = &data->rawRedRb;
+      buffer = data->rawRed;
       break;
    default:
       LOG_ERR ("Unsupported sensor channel.");
@@ -94,10 +50,11 @@ static int max30102_channel_get(const struct device *dev,
 
    /** Get the data from ring buffer. */
    sys_mutex_lock (&mutex, K_FOREVER);
-   ring_buf_item_get (ringBuf, &rbType, &rbValue, &dataRet, &rbSize);
+   if (false == ring_buf_is_empty (ringBuf))
+   {
+      ring_buf_get (ringBuf, (uint8_t *)&dataRet, sizeof(dataRet));
+   }
    sys_mutex_unlock (&mutex);
-
-   LOG_DBG ("Got item of type %u value &u of size %u dwords\n", rbType, rbValue, rbSize);
 
    val->val1 = dataRet;
    val->val2 = 0;
@@ -130,7 +87,7 @@ static int max30102_sample_fetch(const struct device *dev,
    }
 
    /** Read overflow counter */
-   ret = i2c_reg_write_byte_dt (&config->i2c, MAX30102_REG_FIFO_OVF, prev);
+   ret = i2c_reg_read_byte_dt (&config->i2c, MAX30102_REG_FIFO_OVF, &prev);
    if (0 != ret)
    {
       LOG_ERR ("Read overflow counter failed.");
@@ -140,11 +97,11 @@ static int max30102_sample_fetch(const struct device *dev,
    /** Check overflow */
    if (0 != prev)
    {
-      LOG_DBG ("Fifo overrun.");
+      LOG_DBG ("Max30102: Fifo overrun.");
    }
 
    /** Read fifo read point */
-   ret = i2c_reg_write_byte_dt (&config->i2c, MAX30102_REG_FIFO_RD, readPtr);
+   ret = i2c_reg_read_byte_dt (&config->i2c, MAX30102_REG_FIFO_RD, &readPtr);
    if (0 != ret)
    {
       LOG_ERR ("Read fifo read point failed.");
@@ -152,7 +109,7 @@ static int max30102_sample_fetch(const struct device *dev,
    }
 
    /** Read fifo write point */
-   ret = i2c_reg_write_byte_dt (&config->i2c, MAX30102_REG_FIFO_RD, writePtr);
+   ret = i2c_reg_read_byte_dt (&config->i2c, MAX30102_REG_FIFO_RD, &writePtr);
    if (0 != ret)
    {
       LOG_ERR ("Read fifo write point failed.");
@@ -188,7 +145,7 @@ static int max30102_sample_fetch(const struct device *dev,
    }
 
    /** Read fifo. */
-   ret = i2c_read_dt (&config->i2c, max30102RawDataBuff, noOfItems * k);
+   ret = i2c_burst_read_dt (&config->i2c, MAX30102_REG_FIFO_DATA,&max30102RawDataBuff[0], noOfItems * k);
    if (0 != ret)
    {
       LOG_ERR ("read fifo data register failed.");
@@ -241,9 +198,19 @@ static int max30102_sample_fetch(const struct device *dev,
          rawIR = rawIR >> shiftBit;
 
          /** Update the Red value to Ring buffer of Red led and IR led. */
+         /* Enter mutex */
          sys_mutex_lock (&mutex, K_FOREVER);
-         ret = ring_buf_item_put (&data->rawRedRb, sizeof(max30102RawDataBuff[0]), 0, &rawRed, 1);
-         ret = ring_buf_item_put (&data->rawIRRb, sizeof(max30102RawDataBuff[0]), 0, &rawIR, 1);
+         
+         if (!ring_buf_put (&data->rawRedRb, (uint8_t *)&rawRed, sizeof(rawRed)))
+         {
+            LOG_ERR ("Put new data into ring buffer  failed.");
+         }
+         
+         if (!ring_buf_put (&data->rawIRRb, (uint8_t *)&rawIR, sizeof(rawRed)))
+         {
+            LOG_ERR ("Put new data into ring buffer failed.");
+         }
+         /* Exit mutex */
          sys_mutex_unlock (&mutex);
       }
    }
@@ -257,7 +224,7 @@ static const struct sensor_driver_api max30102_driver_api = {
     .channel_get = max30102_channel_get,
 };
 
-static int max30102_int(const struct device *dev)
+static int max30102_int (const struct device *dev)
 {
    struct max30102_config *config = dev->config;
    struct max30102_data *data = dev->data;
@@ -265,10 +232,18 @@ static int max30102_int(const struct device *dev)
    max30102_mode_t modeCfg = 0U;
    uint32_t ledChnl;
    int fifoChnl;
+   uint8_t byteRead = 0u;
 
    /** Initialize the buffer for Red and IR value. */
-   ring_buf_item_init (&data->rawRedRb, MAX30102_NO_OF_ITEM, data->rawRed);
-   ring_buf_item_init (&data->rawIRRb, MAX30102_NO_OF_ITEM, data->rawIR);
+   ring_buf_init (&data->rawRedRb, MAX30102_NO_OF_ITEM * sizeof(data->rawRed[0]), data->rawRed);
+   ring_buf_init (&data->rawIRRb, MAX30102_NO_OF_ITEM * sizeof(data->rawIR[0]), data->rawIR);
+
+   /** Check the interrupt gpio configuration. */
+   if (!device_is_ready(config->int_gpio.port))
+   {
+      LOG_ERR ("Interrupt gpio pin did not configure!");
+      return -ENODEV;
+   }
 
    /** Determine whether i2c bus ready. */
    if (!device_is_ready (config->i2c.bus)) 
@@ -292,9 +267,20 @@ static int max30102_int(const struct device *dev)
       return -EIO;
    }
 
-   /** Reset the sensor. */
-   if (i2c_reg_write_byte_dt (&config->i2c, MAX30102_REG_MODE_CFG, MAX30102_MODE_CFG_RESET_MASK))
+   /* Read mode config */
+   if (i2c_reg_read_byte_dt (&config->i2c, MAX30102_REG_MODE_CFG, &byteRead))
    {
+      LOG_ERR ("Max30102: Read mode config failed.");
+      return -EIO;
+   }
+
+   /* Clear config */
+   byteRead &= ~(1U << 6U);
+   byteRead |= (1u << 6u);
+   
+   if (i2c_reg_write_byte_dt (&config->i2c, MAX30102_REG_MODE_CFG, &byteRead))
+   {
+      LOG_ERR ("Max30102: Write mode config failed.");
       return -EIO;
    }
 
@@ -314,6 +300,18 @@ static int max30102_int(const struct device *dev)
                                config->fifo.R))
    {
       return -EIO;
+   }
+
+   /** Read fifo read point */
+   if (0 != i2c_reg_write_byte_dt (&config->i2c, MAX30102_REG_FIFO_RD, 0x00))
+   {
+      LOG_ERR ("Write fifo read point failed.");
+   }
+
+   /** Read fifo write point */
+   if (0 != i2c_reg_write_byte_dt (&config->i2c, MAX30102_REG_FIFO_RD, 0x00))
+   {
+      LOG_ERR ("Write fifo write point failed.");
    }
 
    /** Write the mode configuration register */
@@ -360,6 +358,9 @@ static int max30102_int(const struct device *dev)
       return -EIO;
    }
 #endif
+
+   /* Setup interrupt. */
+   max30102_setup_interrupt(dev);
 }
 
 static int max30102_deinit (const struct device *dev)
@@ -408,15 +409,17 @@ static uint8_t max30102_read_temperature (const struct device *dev, uint16_t *ra
       LOG_ERR ("Bus device is not ready!");
       return -ENODEV;
    }
-
-   
 }
 
-static struct max30102_data max30102_data;              
+static struct max30102_data max30102_data = {0};              
 static const struct max30102_config max30102_config = { 
    .i2c = I2C_DT_SPEC_INST_GET(0),                          
+   .irq1.B.a_full_en = true,
+   .irq1.B.alc_ovf_en = false,
+   .irq2.B.die_temp_rdy_en = true,
+   .irq1.B.ppg_rdy_en = false,
    .fifo.B.smpAve = CONFIG_MAX30102_SMP_AVE,                   
-   .fifo.B.enRollOver = false,      
+   .fifo.B.enRollOver = false,
    .fifo.B.fifoAlmostFull = CONFIG_MAX30102_FIFO_A_FULL,       
    .spo2.B.adcRange = CONFIG_MAX30102_ADC_RGE,                 
    .spo2.B.sampleRate = CONFIG_MAX30102_SR,                    
@@ -444,9 +447,12 @@ static const struct max30102_config max30102_config = {
    .mode.B.SHDN = false,
    .ledPa[0] = CONFIG_MAX30102_LED1_PA,
    .ledPa[1] = CONFIG_MAX30102_LED2_PA,
+   .int_gpio = GPIO_DT_SPEC_INST_GET_OR (0, int_gpios, {0}),
 };
 
 SENSOR_DEVICE_DT_INST_DEFINE(0, max30102_int, NULL,                              
                              &max30102_data,                                 
-                             &max30102_config, POST_KERNEL,                  
-                             CONFIG_SENSOR_INIT_PRIORITY, &max30102_driver_api);
+                             &max30102_config, 
+                             POST_KERNEL,                  
+                             CONFIG_SENSOR_INIT_PRIORITY, 
+                             &max30102_driver_api);

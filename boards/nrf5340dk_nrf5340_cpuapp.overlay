@@ -4,10 +4,23 @@
  */
 &i2c1 {
    status = "okay";
-   max30102@57 {
+   clock-frequency = <I2C_BITRATE_FAST>;
+   pinctrl-0 = <&max30102_i2c_default>;
+   max30102_sensor: max30102@57 {
+      status = "okay";
       compatible = "maxim,max30102";
       reg = <0x57>;
-      status = "okay";
       label = "MAX30102";
+      int-gpios = <&gpio1 15 (GPIO_PULL_UP | GPIO_ACTIVE_LOW)>;
+   };
+};
+
+&pinctrl {
+   max30102_i2c_default: max30102_i2c {
+      group1 {
+         psels =  <NRF_PSEL(TWIM_SDA, 1, 2)>,
+                  <NRF_PSEL(TWIM_SCL, 1, 3)>;
+         bias-pull-up;
+      };
    };
 };
