@@ -16,9 +16,10 @@ const struct device *const console = DEVICE_DT_GET(DT_CHOSEN(zephyr_console));
 
 void main(void)
 {
-   int ret = 0;
    struct sensor_value irValue;
    struct sensor_value redValue;
+   struct sensor_value temp;
+   float temp_real = 0.0f;
 
    if (dev == NULL)
    {
@@ -34,14 +35,20 @@ void main(void)
 
    while (1)
    {
-      sensor_sample_fetch(dev);
-      sensor_channel_get(dev, SENSOR_CHAN_IR, &irValue);
-      sensor_channel_get(dev, SENSOR_CHAN_RED, &redValue);
+      if (!sensor_channel_get (dev, SENSOR_CHAN_IR, &irValue))
+      {
+         printk ("IR value =%d\n", irValue.val1);
+      }
 
-      /* Print green LED data*/
-      printk ("IR value =%d\n", irValue.val1);
-      printk ("Red value =%d\n", redValue.val1);
+      if (!sensor_channel_get (dev, SENSOR_CHAN_RED, &redValue))
+      {
+         printk ("Red value =%d\n", redValue.val1);
+      }
 
-      k_sleep(K_USEC(1));
+      sensor_channel_get (dev, SENSOR_CHAN_DIE_TEMP, &temp);
+      temp_real = (float)((uint32_t)temp.val1) + ((float)((uint32_t)temp.val2) * 0.0625f);
+      printk ("Temporature = %f\n", temp_real);
+
+      k_sleep(K_SECONDS(1U));
    }
 }

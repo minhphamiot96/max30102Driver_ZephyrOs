@@ -12,6 +12,7 @@
 #include <zephyr/drivers/i2c.h>
 #include <zephyr/drivers/gpio.h>
 #include <zephyr/sys/ring_buffer.h>
+#include <zephyr/sys/mutex.h>
 
 #define MAX30102_REG_INT_STS1 (0x00U)
 #define MAX30102_REG_INT_STS2 (0x01U)
@@ -57,11 +58,11 @@
 
 #define MAX30102_PART_ID (0x15U)
 
-#define MAX30102_THREAD_PRIORITY (10U)
-#define MAX30102_THREAD_STACK_SIZE (1024U)
+#define MAX30102_THREAD_PRIORITY (1U)
+#define MAX30102_THREAD_STACK_SIZE (2048U)
 
 /** 
- * @brief 
+ * @brief The number of item in buffer used in this device driver.
  */
 #define MAX30102_NO_OF_ITEM (32U)
 
@@ -293,11 +294,18 @@ struct max30102_config {
 struct max30102_data {
    struct k_sem sem;
    struct gpio_callback intIrq;
+   float temporature;
    struct ring_buf rawRedRb;
    uint32_t rawRed[MAX30102_NO_OF_ITEM];
    struct ring_buf rawIRRb;
    uint32_t rawIR[MAX30102_NO_OF_ITEM];
 };
+
+/** Max30102: Data of this sensor. */
+extern struct max30102_data max30102_data;
+
+/** Max30102: Configuration of this sensor. */
+extern const struct max30102_config max30102_config;
 
 /**
  * @brief         Initialize the chip
@@ -371,7 +379,7 @@ static uint8_t max30102_read (const struct device *dev, uint32_t *raw_red, uint3
  *                - 3 handle is not initialized
  * @note          none
  */
-static uint8_t max30102_read_temperature (const struct device *dev, uint16_t *raw, float *temp);
+static int max30102_read_temperature (const struct device *dev, uint8_t * raw, float *temp);
 
 /**
  * @brief         irq handler
@@ -400,8 +408,5 @@ static uint8_t max30102_irq_handler (const struct device *dev);
 static uint8_t max30102_get_interrupt_status (  const struct device *dev, 
                                                 max30102_interrupt_status_t status, 
                                                 max30102_bool_t *enable);
-
-
-static void max30102_irqHandler (const struct device * dev, struct gpio_callback *cb, uint32_t pins);
 
 #endif /* ZEPHYR_DRIVERS_SENSOR_MAXIM_MAX30102_H_ */
