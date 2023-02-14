@@ -6,5 +6,6 @@ if (CONFIG_MAX30102)
    zephyr_include_directories(.)
    zephyr_library()
    zephyr_library_sources( max30102.c 
-                           max30102_trigger.c)
+                           max30102_trigger.c
+                           algorithmRF.c)
 endif()

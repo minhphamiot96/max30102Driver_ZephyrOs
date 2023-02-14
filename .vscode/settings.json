@@ -12,7 +12,10 @@
       "max30102.h": "c",
       "mutex.h": "c",
       "*.tcc": "c",
-      "ring_buffer.h": "c"
+      "ring_buffer.h": "c",
+      "stdint.h": "c",
+      "math.h": "c",
+      "algorithmrf.h": "c"
    },
    "nrf-connect.debugging.bindings": {
       "${workspaceFolder}/build": "Launch build"

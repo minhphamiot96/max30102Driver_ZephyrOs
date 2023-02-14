@@ -4,6 +4,7 @@
 #include <zephyr/sys/__assert.h>
 #include <zephyr/logging/log.h>
 #include "max30102.h"
+#include "algorithmRF.h"
 
 LOG_MODULE_DECLARE (max30102, CONFIG_SENSOR_LOG_LEVEL);
 
@@ -195,6 +196,16 @@ static void max30102_thread_main (void * ptr)
             }
 
             /** TODO: Comment */
+            // if (!ring_buf_space_get(&data->rawRedRb))
+            // {
+            //    ring_buf_reset(&data->rawRedRb);
+            // }
+
+            // if (!ring_buf_space_get(&data->rawIRRb))
+            // {
+            //    ring_buf_reset(&data->rawIRRb);
+            // }
+
             for (count = 0u; count < noItems; count++)
             {
                if (MAX30102_MODE_HEART_RATE == cfg->mode.B.mode)
@@ -220,19 +231,12 @@ static void max30102_thread_main (void * ptr)
                   rawIR = rawIR >> bits;
 
                   /** Update the Red value to Ring buffer of Red led and IR led. */
-                  if (!ring_buf_space_get (&data->rawRedRb))
-                  {
-                     ring_buf_reset (&data->rawRedRb);
-                  }
+
                   if (!ring_buf_put(&data->rawRedRb, (uint8_t *)&rawRed, sizeof(rawRed)))
                   {
                      LOG_ERR("Put new data into ring buffer  failed.");
                   }
 
-                  if (!ring_buf_space_get (&data->rawIRRb))
-                  {
-                     ring_buf_reset (&data->rawIRRb);
-                  }
                   if (!ring_buf_put(&data->rawIRRb, (uint8_t *)&rawIR, sizeof(rawRed)))
                   {
                      LOG_ERR("Put new data into ring buffer failed.");
@@ -243,6 +247,16 @@ static void max30102_thread_main (void * ptr)
 
          /** Clear flag which identify the fifo full. */
          isFifoFull = false;
+
+         float spo2Value = 0.0f;
+         int8_t spo2Valid = 0;
+         int32_t heartRate = 0;
+         int8_t hearRateValid = 0;
+         float ratio = 0;
+         float correl = 0;
+         rf_heart_rate_and_oxygen_saturation (&data->rawRedRb, &data->rawIRRb, &spo2Value, &spo2Valid, &heartRate, &hearRateValid, &ratio, &correl);
+
+         printk ("SpO2: %f and HearRate: %d\n", spo2Value, heartRate);
       }
    }
 }

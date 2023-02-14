@@ -282,7 +282,7 @@ const struct max30102_config max30102_config = {
    .fifo.B.fifoAlmostFull = CONFIG_MAX30102_FIFO_A_FULL,       
    .spo2.B.adcRange = CONFIG_MAX30102_ADC_RGE,                 
    .spo2.B.sampleRate = CONFIG_MAX30102_SR,                    
-   .spo2.B.ledPw = MAX30102_PW_18BITS,                         
+   .spo2.B.ledPw = MAX30102_PW_15BITS,                         
 #ifdef CONFIG_MAX30102_HEART_RATE_MODE
    .mode.B.mode = MAX30102_MODE_HEART_RATE,
    .slot[0] = MAX30102_LED_RED,
