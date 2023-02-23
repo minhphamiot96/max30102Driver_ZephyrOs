@@ -15,7 +15,11 @@
       "ring_buffer.h": "c",
       "stdint.h": "c",
       "math.h": "c",
-      "algorithmrf.h": "c"
+      "algorithmrf.h": "c",
+      "random": "c",
+      "compare": "c",
+      "spo2_algorithm.h": "c",
+      "limits": "c"
    },
    "nrf-connect.debugging.bindings": {
       "${workspaceFolder}/build": "Launch build"

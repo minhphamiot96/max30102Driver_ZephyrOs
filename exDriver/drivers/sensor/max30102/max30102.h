@@ -13,6 +13,7 @@
 #include <zephyr/drivers/gpio.h>
 #include <zephyr/sys/ring_buffer.h>
 #include <zephyr/sys/mutex.h>
+#include "algorithmRF.h"
 
 #define MAX30102_REG_INT_STS1 (0x00U)
 #define MAX30102_REG_INT_STS2 (0x01U)
@@ -65,6 +66,11 @@
  * @brief The number of item in buffer used in this device driver.
  */
 #define MAX30102_NO_OF_ITEM (32U)
+
+extern const int32_t BUFFER_SIZE;      // Number of smaples in a single batch
+extern const int32_t LOWEST_PERIOD;    // Minimal distance between peaks
+extern const int32_t HIGHEST_PERIOD;   // Maximal distance between peaks
+extern const float mean_X;             // Mean value of the set of integers from 0 to BUFFER_SIZE-1. For ST=4 and FS=25 it's equal to 49.5.
 
 /**
  * @brief max30102 bool enumeration definition
@@ -296,9 +302,9 @@ struct max30102_data {
    struct gpio_callback intIrq;
    float temporature;
    struct ring_buf rawRedRb;
-   uint32_t rawRed[MAX30102_NO_OF_ITEM];
    struct ring_buf rawIRRb;
-   uint32_t rawIR[MAX30102_NO_OF_ITEM];
+   uint32_t * bufferRed;
+   uint32_t * bufferIR;
 };
 
 /** Max30102: Data of this sensor. */

@@ -35,19 +35,9 @@ void main(void)
 
    while (1)
    {
-      // if (!sensor_channel_get (dev, SENSOR_CHAN_IR, &irValue))
-      // {
-      //    printk ("IR value =%d\n", irValue.val1);
-      // }
-
-      // if (!sensor_channel_get (dev, SENSOR_CHAN_RED, &redValue))
-      // {
-      //    printk ("Red value =%d\n", redValue.val1);
-      // }
-
-      sensor_channel_get (dev, SENSOR_CHAN_DIE_TEMP, &temp);
-      temp_real = (float)((uint32_t)temp.val1) + ((float)((uint32_t)temp.val2) * 0.0625f);
-      printk ("Temporature = %f\n", temp_real);
+      // sensor_channel_get (dev, SENSOR_CHAN_DIE_TEMP, &temp);
+      // temp_real = (float)((uint32_t)temp.val1) + ((float)((uint32_t)temp.val2) * 0.0625f);
+      // printk ("Temporature = %f\n", temp_real);
 
       k_sleep(K_SECONDS(1U));
    }

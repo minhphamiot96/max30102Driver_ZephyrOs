@@ -11,8 +11,12 @@
 #include <zephyr/logging/log.h>
 
 #include "max30102.h"
+#include "algorithmRF.h"
 
 LOG_MODULE_REGISTER(max30102, CONFIG_SENSOR_LOG_LEVEL);
+
+uint32_t bufferRed[125U] = {0};
+uint32_t bufferIR[125U] = {0};
 
 /** 
  * @brief The mutex used in this sensor.
@@ -34,14 +38,6 @@ static int max30102_channel_get (const struct device *dev,
    /** Determine the data type need to return based on chan variable. */
    switch (chan)
    {
-   case SENSOR_CHAN_IR:
-      ringBuf = &data->rawIRRb;
-      buffer = data->rawIR;
-      break;
-   case SENSOR_CHAN_RED:
-      ringBuf = &data->rawRedRb;
-      buffer = data->rawRed;
-      break;
    case SENSOR_CHAN_DIE_TEMP:
       max30102_read_temperature (dev, raw, &temp);
       val->val1 = raw[0];
@@ -96,8 +92,10 @@ static int max30102_int (const struct device *dev)
    uint8_t byteRead = 0u;
 
    /** Initialize the buffer for Red and IR value. */
-   ring_buf_init (&data->rawRedRb, MAX30102_NO_OF_ITEM * sizeof(data->rawRed[0]), data->rawRed);
-   ring_buf_init (&data->rawIRRb, MAX30102_NO_OF_ITEM * sizeof(data->rawIR[0]), data->rawIR);
+   data->bufferIR = bufferRed;
+   data->bufferRed = bufferRed;
+   ring_buf_init (&data->rawRedRb, BUFFER_SIZE * sizeof(bufferRed[0]), (uint8_t *)&bufferRed[0]);
+   ring_buf_init (&data->rawIRRb, BUFFER_SIZE * sizeof(bufferIR[0]), (uint8_t *)&bufferIR[0]);
 
    /** Determine whether i2c bus ready. */
    if (!device_is_ready (config->i2c.bus)) 
@@ -282,7 +280,7 @@ const struct max30102_config max30102_config = {
    .fifo.B.fifoAlmostFull = CONFIG_MAX30102_FIFO_A_FULL,       
    .spo2.B.adcRange = CONFIG_MAX30102_ADC_RGE,                 
    .spo2.B.sampleRate = CONFIG_MAX30102_SR,                    
-   .spo2.B.ledPw = MAX30102_PW_15BITS,                         
+   .spo2.B.ledPw = MAX30102_PW_18BITS,                         
 #ifdef CONFIG_MAX30102_HEART_RATE_MODE
    .mode.B.mode = MAX30102_MODE_HEART_RATE,
    .slot[0] = MAX30102_LED_RED,
